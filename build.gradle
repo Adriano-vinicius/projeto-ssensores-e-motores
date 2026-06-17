@@ -1,0 +1,57 @@
+plugins {
+    id "java"
+    id "com.kauailabs.first.GradleRIO" version "2020.3.2.30"
+}
+
+sourceCompatibility = JavaVersion.VERSION_11
+targetCompatibility = JavaVersion.VERSION_11
+
+def ROBOT_MAIN_CLASS = "frc.robot.Main"
+
+repositories {
+    // 1º: Servidor da FIRST (WPI)
+    maven { url "https://frcmaven.wpi.edu/maven/release" }
+    // 2º: Servidor da Studica
+    maven { url "https://dev.studica.com/maven/release" }
+    // 3º: O central por último
+    mavenCentral()
+}
+
+deploy {
+    targets {
+        vmxpi("roborio") {
+            team = frc.getTeamNumber()
+        }
+    }
+    artifacts {
+        frcJavaArtifact('frcJava') {
+            targets << "roborio"
+            debug = frc.getDebugOrDefault(false)
+        }
+        fileTreeArtifact('frcStaticFileDeploy') {
+            files = fileTree(dir: 'src/main/deploy')
+            targets << "roborio"
+            directory = '/home/lvuser/deploy'
+        }
+    }
+}
+
+dependencies {
+    implementation wpi.deps.wpilib()
+    nativeZip wpi.deps.wpilibJni(wpi.platforms.raspbian)
+    nativeDesktopZip wpi.deps.wpilibJni(wpi.platforms.desktop)
+
+    implementation wpi.deps.vendor.java()
+    nativeZip wpi.deps.vendor.jni(wpi.platforms.raspbian)
+    nativeDesktopZip wpi.deps.vendor.jni(wpi.platforms.desktop)
+
+    testImplementation 'junit:junit:4.12'
+
+    simulation wpi.deps.sim.gui(wpi.platforms.desktop, false)
+    simulation wpi.deps.sim.driverstation(wpi.platforms.desktop, false)
+}
+
+jar {
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+    manifest edu.wpi.first.gradlerio.GradleRIOPlugin.javaManifest(ROBOT_MAIN_CLASS)
+}
