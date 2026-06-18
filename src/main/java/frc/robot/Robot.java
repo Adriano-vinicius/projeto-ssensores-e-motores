@@ -21,25 +21,37 @@ public class Robot extends TimedRobot {
     private DigitalInput btnStart;
     private DigitalInput btnStop;
 
-    private Ultrasonic sonar;
-    private boolean sonarOk = false;
-
     private boolean lastStart = false;
     private boolean lastStop = false;
 
-    private Timer sonarPrintTimer = new Timer();
-    private Timer manobraTimer = new Timer();
+    private boolean roboLiberado = false;
 
-    private enum AutoState {
-        ANDAR_FRENTE,
-        RECUAR
+    private Ultrasonic sonar;
+    private boolean sonarOk = false;
+
+    private Timer printTimer = new Timer();
+    private Timer giroTimer = new Timer();
+
+    private static final double DISTANCIA_PARAR_CM = 55.0;
+
+    // Ajuste esse tempo depois.
+    // Se girar pouco, aumente.
+    // Se girar demais, diminua.
+    private static final double TEMPO_GIRO_180 = 4.50;
+
+    private enum EstadoRobo {
+        AGUARDANDO_START,
+        ANDANDO,
+        GIRANDO_180,
+        FINALIZADO
     }
 
-    private AutoState autoState = AutoState.ANDAR_FRENTE;
+    private EstadoRobo estado = EstadoRobo.AGUARDANDO_START;
 
     @Override
     public void robotInit() {
         titan = new Titan(Constants.TITAN_ID);
+
         motor0 = titan.getMotor(Constants.MOTOR_0);
         motor1 = titan.getMotor(Constants.MOTOR_1);
         motor2 = titan.getMotor(Constants.MOTOR_2);
@@ -50,24 +62,35 @@ public class Robot extends TimedRobot {
         btnStop = new DigitalInput(Constants.BTN_STOP);
 
         try {
-            sonar = new Ultrasonic(Constants.ULTRASONIC_TRIGGER, Constants.ULTRASONIC_ECHO);
+            sonar = new Ultrasonic(
+                    Constants.ULTRASONIC_TRIGGER,
+                    Constants.ULTRASONIC_ECHO
+            );
 
-            // Modo manual: o código dispara o TRIG usando sonar.ping()
-            sonar.setAutomaticMode(false);
-            sonar.setEnabled(true);
+            // Modo automático para ler direto com getRangeMM()
+            sonar.setAutomaticMode(true);
 
             sonarOk = true;
             System.out.println("Ultrassonico iniciado com sucesso.");
         } catch (Exception e) {
             sonarOk = false;
-            System.out.println("Erro ao iniciar o ultrassonico:");
+            System.out.println("Erro ao iniciar ultrassonico:");
             e.printStackTrace();
         }
 
-        sonarPrintTimer.reset();
-        sonarPrintTimer.start();
+        roboLiberado = false;
+        estado = EstadoRobo.AGUARDANDO_START;
+
+        printTimer.reset();
+        printTimer.start();
+
+        giroTimer.stop();
+        giroTimer.reset();
 
         stopMotors();
+
+        System.out.println("Robo iniciado.");
+        System.out.println("Aguardando START fisico.");
     }
 
     @Override
@@ -77,83 +100,106 @@ public class Robot extends TimedRobot {
         boolean curStart = btnStart.get();
         boolean curStop = btnStop.get();
 
+        // START físico pressionado
         if (lastStart && !curStart) {
+            roboLiberado = true;
+            estado = EstadoRobo.ANDANDO;
             ds.enable();
-            System.out.println("Comando: Habilitar enviado.");
+
+            System.out.println("START pressionado: robo liberado.");
         }
 
+        // STOP físico pressionado
         if (lastStop && !curStop) {
+            roboLiberado = false;
+            estado = EstadoRobo.FINALIZADO;
             ds.disable();
-            System.out.println("Comando: Desabilitar enviado.");
+            stopMotors();
+
+            System.out.println("STOP pressionado: robo parado.");
         }
 
         lastStart = curStart;
         lastStop = curStop;
 
-        if (sonarOk && sonarPrintTimer.get() >= 0.5) {
-            double distanciaCm = getDistanceCm();
+        if (printTimer.get() >= 0.5) {
+            double distancia = getDistanceCm();
 
-            if (distanciaCm < 0) {
-                System.out.println("Ultrassonico: sem leitura valida.");
-            } else {
-                System.out.printf("Ultrassonico: %.1f cm%n", distanciaCm);
-            }
+            System.out.printf("Estado: %s | Distancia lida: %.1f cm%n", estado, distancia);
 
-            sonarPrintTimer.reset();
+            printTimer.reset();
         }
     }
 
     @Override
     public void autonomousInit() {
-        autoState = AutoState.ANDAR_FRENTE;
-        manobraTimer.stop();
-        manobraTimer.reset();
+        System.out.println("Autonomo iniciado.");
     }
 
     @Override
     public void autonomousPeriodic() {
-        if (!sonarOk) {
-            andarFrente();
+        executarLogica();
+    }
+
+    @Override
+    public void teleopInit() {
+        System.out.println("Teleop iniciado.");
+    }
+
+    @Override
+    public void teleopPeriodic() {
+        executarLogica();
+    }
+
+    private void executarLogica() {
+        if (!roboLiberado) {
+            stopMotors();
             return;
         }
 
-        double distanciaCm = getDistanceCm();
+        switch (estado) {
 
-        switch (autoState) {
-            case ANDAR_FRENTE:
+            case AGUARDANDO_START:
+                stopMotors();
+                break;
+
+            case ANDANDO:
                 andarFrente();
 
-                if (distanciaCm > 0 && distanciaCm <= 6.0) {
-                    autoState = AutoState.RECUAR;
-                    manobraTimer.reset();
-                    manobraTimer.start();
-                    System.out.printf("Obstaculo detectado: %.1f cm -> recuando%n", distanciaCm);
+                double distancia = getDistanceCm();
+
+                // Se der 0, ele ignora, porque 0 normalmente é falha de leitura
+                if (distancia > 0 && distancia <= DISTANCIA_PARAR_CM) {
+                    stopMotors();
+
+                    estado = EstadoRobo.GIRANDO_180;
+                    giroTimer.reset();
+                    giroTimer.start();
+
+                    System.out.printf("Obstaculo detectado em %.1f cm. Iniciando giro 180.%n", distancia);
                 }
                 break;
 
-            case RECUAR:
-                recuar();
+            case GIRANDO_180:
+                girar180();
 
-                if (manobraTimer.get() >= 0.6) {
-                    manobraTimer.stop();
-                    manobraTimer.reset();
-                    autoState = AutoState.ANDAR_FRENTE;
-                    System.out.println("Voltando a andar.");
+                if (giroTimer.get() >= TEMPO_GIRO_180) {
+                    giroTimer.stop();
+                    giroTimer.reset();
+
+                    stopMotors();
+
+                    estado = EstadoRobo.FINALIZADO;
+                    roboLiberado = false;
+
+                    System.out.println("Giro finalizado. Programacao encerrada com motores parados.");
                 }
+                break;
+
+            case FINALIZADO:
+                stopMotors();
                 break;
         }
-    }
-
-    private void andarFrente() {
-        motor0.set(0.0);
-        motor1.set(Constants.VELOCIDADE * 0.5);
-        motor2.set(-Constants.VELOCIDADE * 0.5);
-    }
-
-    private void recuar() {
-        motor0.set(0.0);
-        motor1.set(-Constants.VELOCIDADE * 0.5);
-        motor2.set(Constants.VELOCIDADE * 0.5);
     }
 
     private double getDistanceCm() {
@@ -162,24 +208,30 @@ public class Robot extends TimedRobot {
         }
 
         try {
-            // Dispara o TRIG
-            sonar.ping();
+            double distanciaMm = sonar.getRangeMM();
+            double distanciaCm = distanciaMm / 10.0;
 
-            // Espera o ECHO voltar
-            Timer.delay(0.05);
-
-            // Se não recebeu ECHO válido, retorna erro
-            if (!sonar.isRangeValid()) {
-                return -1.0;
-            }
-
-            return sonar.getRangeMM() / 10.0;
+            return distanciaCm;
 
         } catch (Exception e) {
             System.out.println("Erro lendo ultrassonico:");
             e.printStackTrace();
             return -1.0;
         }
+    }
+
+    private void andarFrente() {
+        motor0.set(0.0);
+        motor1.set(Constants.VELOCIDADE);
+        motor2.set(-Constants.VELOCIDADE);
+    }
+
+    private void girar180() {
+        motor0.set(0.0);
+
+        // Giro no próprio eixo
+        motor1.set(Constants.VELOCIDADE);
+        motor2.set(Constants.VELOCIDADE);
     }
 
     private void stopMotors() {
@@ -196,5 +248,6 @@ public class Robot extends TimedRobot {
     @Override
     public void disabledInit() {
         stopMotors();
+        System.out.println("Robo desabilitado: motores parados.");
     }
 }
