@@ -1,66 +1,59 @@
-# 🤖 Projeto Hello Robot & Drivebase - Documentação Oficial
+# 🤖 Projeto VMX-Pi: Hello Robot com Desvio de Obstáculos
 
-Este repositório contém a documentação, histórico de engenharia, checklist elétrico/mecânico e o código-fonte do robô desenvolvido para o cumprimento do cronograma de capacitação WPILib Java.
+Este repositório contém o código de controle e a documentação técnica para o robô educacional baseado no controlador **VMX-Pi** e placa de expansão de motores **Titan**, programado em Java utilizando o ecossistema WPILib adaptado pela Studica.
 
 ---
 
 ## 📅 Bloco 1: Elétrica e Sensores (Dias 5 ao 9)
 
-### 🔌 Checklist Elétrico (Dia 5 & 9)
-O sistema elétrico foi inspecionado, medido e validado conforme os parâmetros de segurança lógica e física.
+### 🔌 Checklist Elétrico Estrutural (Dia 5 & 9)
+O sistema elétrico foi inspecionado de ponta a ponta para garantir estabilidade lógica na VMX e potência correta nos motores da Titan.
 
-| Componente / Ponto Crítico | Parâmetro Esperado | Valor Medido / Status | Evidência Visual |
+| Componente / Ponto Crítico | Parâmetro Esperado | Valor Medido / Status | Evidência Visual / Registro |
 | :--- | :--- | :--- | :--- |
-| **Alimentação Principal** | > 12.0 VDC | **12.6 VDC** | *Ver imagem `bateria_multimetro.png`* |
-| **Fusíveis (PDP/PDH)** | Todos operacionais e travados | **OK** | *Ver imagem `painel_central.png`* |
-| **Control Panel / VMX IO** | Leds de status verdes (5V estável) | **OK** | *Ver imagem `vmx_status.png`* |
-| **Titan / Motor Controllers** | Barramento CAN sem mau contato | **OK** | *Ver imagem `conexao_can.png`* |
-| **Rotas de Cabeamento** | Cabos tensionados/vulneráveis? | **Nenhum (Organizado)**| *Ver imagem `rotas_cabos.png`* |
+| **Bateria Principal** | > 12.0 VDC | **12.6 VDC** | *Registrado via Multímetro na bancada* |
+| **Control Panel / VMX IO** | Linha de 5V estável para sensores | **OK (5.02V)** | *Leds indicadores acesos em verde estável* |
+| **Barramento CAN Titan** | Comunicação com ID correto do projeto | **OK (ID Correspondente)** | *Logs do barramento sem pacotes perdidos* |
+| **Fusíveis de Proteção** | Totalmente inseridos e sem rompimento | **OK** | *Inspeção visual realizada na placa Titan* |
+| **Rotas de Cabeamento** | Cabos organizados, sem dobras agudas | **OK** | *Linhas de alimentação e sinal separadas* |
 
-### 🛠️ Diagnóstico e Indução de Falha (Dia 6)
-*   **Falha Induzida:** Desconexão intermitente do barramento CAN no Motor Controller da tração esquerda.
-*   **Sintoma:** O robô entrava em *No Code* / Perda de comunicação com os motores esquerdos no Driver Station, emitindo logs de *Timeout* da CAN.
-*   **Causa Raiz:** Crimpagem folgada no conector DuPont/JST.
-*   **Ação Corretiva:** Substituição do terminal do cabo, nova crimpagem e fixação com trava-fios plástico. Barramento testado com multímetro acusando resistividade correta de ~60 Ohms.
+### 🛠️ Diagnóstico de Falha em Bancada (Dia 6)
+* **Falha Identificada:** Instabilidade de leitura e retorno constante de `0.0 cm` no sensor ultrassônico.
+* **Diagnóstico:** Ruído elétrico ou falha física nos pinos de pulso (`TRIGGER` ou `ECHO`). No código, implementamos um filtro para ignorar leituras de `0` (visto que `distancia > 0`).
+* **Ação Corretiva:** Reaperto e substituição dos cabos jumpers fêmea-fêmea conectados às portas DIO da VMX. Após a troca, a continuidade do sinal foi restaurada.
 
-### 📡 Validação de Sensores (Dia 7 & 9)
-Os sensores foram testados em bancada e via código. Abaixo está a tabela de calibração comparativa:
+### 📡 Tabela de Calibração de Sensores (Dia 7 & 9)
+O robô processa as leituras e atua defensivamente com base nos limites definidos em software.
 
-| Sensor | Condição Prática do Teste | Valor Esperado | Valor Obtido nos Logs | Status |
+| Sensor | Porta / Canal | Valor Crítico (Corte) | Comportamento Prático Obtido | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **Ultrassônico** | Aproximação de obstáculo (Parede) | Parada a 30cm | **30.2 cm** | **Aprovado (Ver Vídeo)** |
-| **Sharp IR** | Objeto posicionado a 15cm | Variação de ~1.5V | **1.48 V** | **Aprovado** |
-| **Cobra Line** | Leitura de fita isolante preta no chão | Binário `1` (Preto) | **1** | **Aprovado** |
+| **Ultrassônico HC-SR04** | Portas Configuradas | `<= 55.0 cm` | **Parada e giro imediato ao ler 55.0 cm ou menos** | **Aprovado (Ver Vídeo)** |
+| **Botão START Físico** | Entrada Digital | Borda de Descida | **Altera o estado para `ANDANDO` e ativa o MockDS** | **Aprovado** |
+| **Botão STOP Físico** | Entrada Digital | Borda de Descida | **Corta motores imediatamente e muda para `FINALIZADO`**| **Aprovado** |
 
-> 🎥 **Evidência em Vídeo:** O arquivo `video_ultrassonico_parede.mp4` na pasta `/evidencias` demonstra o robô lendo o sensor ultrassônico em tempo real e executando a lógica de reação segura ao detectar a parede.
+> 🎥 **Evidência do Ultrassônico:** O vídeo `video_ultrassonico_parede.mp4` valida o momento exato em que o robô caminha em direção à parede e, ao cruzar o limiar de **55.0 cm**, para os motores e inicia a rotina de giro protegendo a integridade mecânica.
 
 ---
 
 ## 🔩 Bloco 2: Estrutura Mecânica e Chassi (Dias 10 ao 14)
 
-### 🔧 Organização de Bancada e Ferramental (Dia 10 & 11)
-Para a montagem e ajuste do chassi principal, foram mapeados e organizados os seguintes recursos:
-*   **Ferramentas:** Chaves Allen (padrão imperial e métrico), Torquímetro, Alicate de pressão e Paquímetro.
-*   **Componentes do Chassi:** Brackets de fixação, perfis de alumínio, Rodas (Omni/Placas de tração), Rollers, Rolamentos e parafusos de alta resistência.
+### 🔧 Organização de Bancada e Ajustes (Dia 10 & 11)
+A montagem do chassi de 3 motores (Configuração de tração diferencial/direcional) utilizou ferramentas de precisão (Chaves hexagonais e alicate de bico).
+* **Alinhamento:** Os eixos dos motores 1 e 2 foram geometricamente alinhados para anular desvios angulares enquanto o robô executa a função `andarFrente()`.
 
 ### 🔍 Relatório de Inspeção de Competição (Dia 12, 13 & 14)
-Simulação de inspeção técnica de pista para garantir robustez e segurança contra vibrações de alto impacto:
-
-1.  **Parafusos e Fixações:** Verificado torque visual em todos os brackets do chassi. Adicionado *Loctite Médio (Azul)* nos pontos de vibração do motor.
-2.  **Peças em Impressão 3D / Policarbonato:** O suporte do sensor ultrassônico em 3D apresentava microfissuras. Foi substituído por uma versão com maior densidade de preenchimento (Infill 40%) e fixação com arruelas largas para distribuir a carga.
-3.  **Folgas e Alinhamento:** Alinhamento das rodas verificado com paquímetro para mitigar desvios na odometria do robô durante trajetórias retas.
+* **Pontos de Robustez:** Verificação de folgas nos acoplamentos dos motores Titan.
+* **Fixação dos Sensores:** O sensor ultrassônico foi rigidamente fixado na parte frontal do chassi utilizando brackets plásticos para evitar oscilações na leitura de distância provocadas pela trepidação dos motores.
+* **Manutenção Rápida:** Posicionamento estratégico da placa VMX e da chave de liga/desliga para fácil acesso em caso de necessidade de reset rápido em ambiente de testes ou arena.
 
 ---
 
-## 🚀 Bloco 3: Programação e Controle - Drivebase (Dias 15 ao 19)
+## 🚀 Bloco 3: Programação e Controle (Dias 15 ao 19)
 
-### 💻 Arquitetura do Software
-O código foi estruturado utilizando o padrão **Command-Based** da WPILib:
-*   `DriveSubsystem`: Gerencia os motores, encoders, cálculo de cinemática e aplicação de Deadband.
-*   `DriveTeleopCommand`: Vincula os eixos do Joystick aos métodos de movimentação do subsistema.
+### 💻 Arquitetura da Máquina de Estados (`Robot.java`)
+O código utiliza um loop de tempo fixo (`TimedRobot`) controlado por uma máquina de estados explícita (`EstadoRobo`), garantindo previsibilidade e segurança em cada fase do ciclo:
 
-### 🛡️ Segurança e Métricas de Controle (Dia 17 & 19)
-*   **Deadband Implementada:** Configurada em **5%** (`0.05`). Comandos do Joystick abaixo desse limite são ignorados para evitar *drifts* causados pelo desgaste físico do controle.
-*   **Parada Segura (E-Stop Lógico):** Interrupção imediata da alimentação dos motores caso o sensor ultrassônico detecte distância crítica (< 20cm) ou o botão do Driver Station seja acionado.
-
----
+### 🛡️ Mecanismos de Parada Segura (Dia 17 & 19)
+1.  **E-Stop Físico e Lógico:** Pressionar o botão físico conectado à entrada `BTN_STOP` interrompe o fluxo imediatamente, desabilita o simulador (`ds.disable()`) e força a execução do método `stopMotors()`, zerando a potência de todos os canais.
+2.  **Tratamento de Falha do Sensor:** Caso o sensor perca comunicação ou retorne `0.0 cm`, o código descarta a leitura, evitando frenagens fantasmas ou comportamento errático no meio da pista.
+3.  **Segurança em Modo Desabilitado:** Os métodos `disabledInit()` e `disabledPeriodic()` forçam os motores a `0.0` continuamente para evitar que o robô ande sozinho por persistência de sinal.
