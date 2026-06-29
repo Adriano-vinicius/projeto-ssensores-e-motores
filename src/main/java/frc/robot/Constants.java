@@ -11,6 +11,9 @@ public final class Constants {
   public static final int BTN_START = 11;
    public static final int BTN_STOP  = 10;
 
+   public static final int LED_1 = 15;
+public static final int LED_2 = 16;
+
    public static final int JOYSTICK_PORT = 0;
 
     // Ultrassonico
